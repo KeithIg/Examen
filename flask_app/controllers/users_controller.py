@@ -1,0 +1,74 @@
+from flask import Flask, render_template, redirect, request, session, flash
+from flask_app import app
+
+#Importamos todos los modelos
+from flask_app.models.users import User
+from flask_app.models.appointments import Appointments
+
+from flask_bcrypt import Bcrypt
+bcrypt = Bcrypt(app)
+
+from datetime import datetime 
+
+@app.route('/')
+def index():
+    return render_template('index.html')
+
+@app.route('/register', methods=['POST'])
+def register():
+    if not User.validate_user(request.form):
+        return redirect('/') 
+    
+    pass_encrypt = bcrypt.generate_password_hash(request.form['password'])
+    #Generar un diccionario con toda la info del formulario
+    form = {
+        "first_name": request.form['first_name'],
+        "email": request.form['email'],
+        "password": pass_encrypt
+    }
+
+    id = User.save(form) #Recibo a cambio el ID del nuevo usuario
+    session['user_id'] = id #Guardamos en sesión el identificador del usuario
+    return redirect('/dashboard')
+
+@app.route('/dashboard')
+def dashboard():
+    if 'user_id' not in session:
+        flash('Favor de iniciar sesión', 'not_in_session')
+        return redirect('/')
+    form = {"id": session['user_id']}
+    user = User.get_by_id(form)
+    return render_template('dashboard.html', user=user)
+
+
+@app.route('/login', methods=['POST'])
+def login():
+    user = User.get_by_email(request.form)
+
+    if not user: 
+        flash('E-mail no registrado', 'login')
+        return redirect('/')
+
+    if not bcrypt.check_password_hash(user.password, request.form['password']):
+        flash('Password incorrecto', 'login')
+        return redirect('/')
+    
+    session['user_id'] = user.id
+    return redirect('/dashboard')
+
+@app.route('/appointments')
+def citas():
+    if 'user_id' not in session:
+        flash('Favor de iniciar sesión', 'not_in_session')
+        return redirect('/')
+    form = {"id": session['user_id']}
+    user = User.get_by_id(form)
+    appointments = Appointments.get_all()
+    return render_template('citas.html', user=user, appointments=appointments)
+
+
+
+@app.route('/logout')
+def logout():
+    session.clear()
+    return redirect('/')
